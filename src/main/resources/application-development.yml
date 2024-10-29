@@ -1,8 +1,8 @@
 spring:
   datasource:
-    username: root
-    password: 12341234
-    url: jdbc:mysql://localhost:3306/spring-batch?useUnicode=true&characterEncoding=utf8&useSSL=false&useLegacyDatetimeCode=false&serverTimezone=Asia/Seoul&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true
+    username: wegoolid
+    password: password
+    url: jdbc:mysql://localhost:3306/wegooli?useUnicode=true&characterEncoding=utf8&useSSL=false&useLegacyDatetimeCode=false&serverTimezone=Asia/Seoul&createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true
     hikari:
       poolName: Hikari
       auto-commit: false

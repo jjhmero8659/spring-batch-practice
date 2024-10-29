@@ -1,4 +1,4 @@
-package it.springbatch.springbatchlecture;
+package it.springbatch.springbatchlecture.batchconfig;
 
 import java.util.Map;
 import org.springframework.batch.core.JobParameters;
