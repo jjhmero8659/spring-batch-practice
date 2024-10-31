@@ -1,19 +1,14 @@
 package it.springbatch.springbatchlecture.batch.job;
 import static it.springbatch.springbatchlecture.adapter.out.entity.QReservationJpaEntity.reservationJpaEntity;
 
-import com.querydsl.jpa.impl.JPAQueryFactory;
-import it.springbatch.springbatchlecture.adapter.out.entity.QReservationJpaEntity;
 import it.springbatch.springbatchlecture.adapter.out.entity.ReservationJpaEntity;
 import it.springbatch.springbatchlecture.adapter.out.entity.ReservationJpaRepository;
-import it.springbatch.springbatchlecture.batch.chunk.listner.SampleChunkListener;
-import it.springbatch.springbatchlecture.batch.tasklet.UnFreezeEndTasklet;
-import it.springbatch.springbatchlecture.batch.tasklet.UnFreezeStartTasklet;
-import jakarta.persistence.EntityManager;
+import it.springbatch.springbatchlecture.batch.listner.CustomAnnotationJobExecutionListener;
+import it.springbatch.springbatchlecture.batch.reader.QuerydslPagingItemReader;
 import jakarta.persistence.EntityManagerFactory;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
-import java.util.List;
 import kr.freezz.application.model.ReservationStatus;
 import kr.freezz.common.generator.IdGenerator;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +18,7 @@ import org.springframework.batch.core.Step;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemReader;
 import org.springframework.batch.item.ItemWriter;
 import org.springframework.batch.item.database.JpaPagingItemReader;
@@ -36,69 +32,66 @@ import org.springframework.transaction.PlatformTransactionManager;
 public class UnFreezeJobConfiguration {
 	private final JobRepository jobRepository;
 	private final PlatformTransactionManager tx;
-	private final JPAQueryFactory jpaQueryFactory;
 	private final EntityManagerFactory entityManagerFactory;
 	private final ReservationJpaRepository reservationJpaRepository;
-	private final SampleChunkListener sampleChunkListener;
-
-	private int chunkSize = 10;
+	private int pageSize = 2;
+	private int chunkSize = 2;
 
 	@Bean
 	public Job unfreezeJob() {
-		return new JobBuilder("unfreezeJob", jobRepository)
-				.start(this.unfreezeReservationStep())
+		return new JobBuilder("unFreezeJob", jobRepository)
+				.start(unfreezeReservationStep())
+				.listener(new CustomAnnotationJobExecutionListener())
 				.build();
 	}
 
 	@Bean
 	public Step unfreezeReservationStep() {
-		log.info("Froze Reservation Step Processing..");
-
  		return new StepBuilder("unfreezeReservationStep", jobRepository)
-				.listener(sampleChunkListener)
+				// .listener(sampleChunkListener)
 				// PlatformTransactionManager 명시 해줘야 함
 				.<ReservationJpaEntity, ReservationJpaEntity> chunk(chunkSize,tx) //page size 와 chunk size 를 동일하게 설정
-				.reader(itemReader())
-				.writer(itemWriter())
+				// .listener(new CustomStepExecutionListener())
+				.reader(unfreezeReader())
+				.processor(unfreezeProcessor())
+				.writer(unfreezeWriter())
 				.build();
 	}
 
 	@Bean
-	public ItemReader<? extends ReservationJpaEntity> itemReader() {
-		HashMap<String, Object> parameters = new HashMap<>();
-		// List<ReservationJpaEntity> fetch = jpaQueryFactory
-		// 		.selectFrom(reservationJpaEntity)
-		// 		.where(reservationJpaEntity.status.eq(ReservationStatus.FROZE))
-		// 		.where(reservationJpaEntity.deleted.isFalse())
-		// 		.where(reservationJpaEntity.arrivalTime.after(
-		// 				Instant.now().plus(Duration.ofHours(9))))
-		// 		.fetch();
+	public ItemReader<? extends ReservationJpaEntity> unfreezeReader() {
 
-		parameters.put("status", ReservationStatus.FROZE);
-		parameters.put("deleted", false);
 
-		JpaPagingItemReader<ReservationJpaEntity> reader = new JpaPagingItemReader<>();
-		reader.setParameterValues(parameters);
-		reader.setPageSize(chunkSize);
-		reader.setQueryString(
-				"SELECT r FROM ReservationJpaEntity r "
-				+ "WHERE r.status = :status "
-				+ "and deleted = :deleted"
+		QuerydslPagingItemReader<ReservationJpaEntity> reader = new QuerydslPagingItemReader<>(
+				entityManagerFactory, pageSize,
+				queryFactory -> queryFactory
+						.selectFrom(reservationJpaEntity)
+						.where(reservationJpaEntity.status.eq(ReservationStatus.FROZE))
+						.where(reservationJpaEntity.deleted.isFalse())
+						.where(reservationJpaEntity.arrivalTime.before(Instant.now().plus(Duration.ofHours(9))))
 		);
-		reader.setEntityManagerFactory(entityManagerFactory);
 
 		return reader;
 	}
 
-
 	@Bean
-	public ItemWriter<? super ReservationJpaEntity> itemWriter() {
+	public ItemProcessor<ReservationJpaEntity, ReservationJpaEntity> unfreezeProcessor(){
+		return entity -> {
+			log.info("예약 {} 의 상태를 UNFROZE" , IdGenerator.convertStringId(entity.getId()));
+			entity.setStatus(ReservationStatus.UNFROZE);
+			return entity;
+		};
+	}
+
+	// JpaItemWriter
+	@Bean
+	public ItemWriter<? super ReservationJpaEntity> unfreezeWriter() {
 		return items -> {
 			for (ReservationJpaEntity item : items) {
 				log.info("예약 {} 상태 변경 작동", IdGenerator.convertStringId(item.getId()));
-				item.setStatus(ReservationStatus.UNFROZE);
 			}
 			reservationJpaRepository.saveAll(items);
+
 		};
 	}
 

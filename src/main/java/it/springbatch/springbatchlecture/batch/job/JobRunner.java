@@ -17,7 +17,6 @@ public abstract class JobRunner implements ApplicationRunner {
 	public void run(ApplicationArguments args) throws Exception {
 		doRun(args);
 	}
-
 	protected abstract void doRun(ApplicationArguments args);
 
 	public Trigger buildJobTrigger(String scheduleExp) {
